@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>totative</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #080b0f;
+      --surface: #0d1117;
+      --border: #1c2a3a;
+      --accent: #00d4ff;
+      --accent2: #7b61ff;
+      --dim: #1e3448;
+      --text: #c9d8e8;
+      --muted: #3d5a72;
+      --glow: rgba(0, 212, 255, 0.08);
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      overflow: hidden;
+    }
+
+    /* Scanline overlay */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.03) 2px,
+        rgba(0,0,0,0.03) 4px
+      );
+      pointer-events: none;
+      z-index: 100;
+    }
+
+    canvas#grid {
+      position: fixed;
+      inset: 0;
+      opacity: 0.18;
+      z-index: 0;
+    }
+
+    .shell {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: 200px 1fr 200px;
+      grid-template-rows: 40px 1fr 40px;
+      height: 100vh;
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+    }
+
+    .panel {
+      background: var(--surface);
+      overflow: hidden;
+    }
+
+    /* Top bar */
+    .topbar {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+    }
+
+    .topbar .status-dot {
+      display: inline-block;
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      margin-right: 6px;
+      box-shadow: 0 0 6px var(--accent);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    /* Left sidebar */
+    .sidebar-left {
+      padding: 12px 0;
+      font-size: 9px;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      background: var(--bg);
+      border-right: 1px solid var(--border);
+    }
+
+    .sidebar-left .section {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--dim);
+    }
+
+    .sidebar-left .label {
+      font-size: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .sidebar-left .val {
+      color: var(--accent);
+      font-size: 9px;
+    }
+
+    .sidebar-left .bar-wrap {
+      background: var(--dim);
+      height: 3px;
+      border-radius: 2px;
+      margin-top: 4px;
+      overflow: hidden;
+    }
+
+    .sidebar-left .bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 2px;
+      animation: bar-flicker 3s ease-in-out infinite;
+    }
+
+    @keyframes bar-flicker {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+
+    /* Center panel */
+    .center {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      background: var(--bg);
+      gap: 0;
+    }
+
+    .wordmark {
+      font-size: clamp(28px, 5vw, 52px);
+      font-weight: 400;
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+      color: var(--text);
+      position: relative;
+    }
+
+    .wordmark::before {
+      content: attr(data-text);
+      position: absolute;
+      left: 2px;
+      top: 2px;
+      color: var(--accent2);
+      opacity: 0.35;
+      filter: blur(1px);
+      animation: glitch 8s steps(1) infinite;
+    }
+
+    @keyframes glitch {
+      0%, 94%, 100% { clip-path: none; transform: none; opacity: 0.35; }
+      95% { clip-path: inset(20% 0 60% 0); transform: translateX(-3px); opacity: 0.8; }
+      96% { clip-path: inset(60% 0 20% 0); transform: translateX(3px); opacity: 0.6; }
+      97% { clip-path: none; transform: translateX(-1px); }
+    }
+
+    .tagline {
+      margin-top: 18px;
+      font-size: 10px;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .divider {
+      margin: 24px auto;
+      width: 60px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    }
+
+    .hex-grid {
+      display: flex;
+      gap: 4px;
+      font-size: 8px;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+      opacity: 0.7;
+    }
+
+    .hex-grid span { animation: hex-cycle 4s linear infinite; }
+    .hex-grid span:nth-child(2) { animation-delay: 0.4s; }
+    .hex-grid span:nth-child(3) { animation-delay: 0.8s; }
+    .hex-grid span:nth-child(4) { animation-delay: 1.2s; }
+    .hex-grid span:nth-child(5) { animation-delay: 1.6s; }
+    .hex-grid span:nth-child(6) { animation-delay: 2.0s; }
+
+    @keyframes hex-cycle {
+      0%, 100% { color: var(--muted); }
+      50% { color: var(--accent); }
+    }
+
+    /* Right sidebar */
+    .sidebar-right {
+      padding: 12px 0;
+      font-size: 9px;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      background: var(--bg);
+      border-left: 1px solid var(--border);
+    }
+
+    .log-feed {
+      padding: 8px 12px;
+      font-size: 8px;
+      line-height: 1.9;
+      color: var(--muted);
+      overflow: hidden;
+    }
+
+    .log-feed .label {
+      font-size: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      color: var(--muted);
+      margin-bottom: 6px;
+      border-bottom: 1px solid var(--dim);
+      padding-bottom: 6px;
+    }
+
+    .log-entry { display: block; white-space: nowrap; }
+    .log-entry .ts { color: var(--dim); margin-right: 4px; }
+    .log-entry.ok .code { color: #00ff9d; }
+    .log-entry.warn .code { color: #ffcc00; }
+    .log-entry.info .code { color: var(--accent); }
+
+    /* Bottom bar */
+    .bottombar {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+      font-size: 9px;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+    }
+
+    .bottombar .cursor {
+      display: inline-block;
+      width: 7px; height: 11px;
+      background: var(--accent);
+      vertical-align: middle;
+      margin-left: 4px;
+      animation: blink 1.1s step-end infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+
+    .coords {
+      display: flex;
+      gap: 16px;
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="grid"></canvas>
+
+<div class="shell">
+
+  <!-- Top bar -->
+  <div class="topbar panel">
+    <span><span class="status-dot"></span>SYS:ACTIVE &nbsp;|&nbsp; NODE_ID:0x4F2A &nbsp;|&nbsp; ENV:PROD</span>
+    <span id="clock">00:00:00.000</span>
+    <span>BUILD:&nbsp;<span id="build-hash">--</span></span>
+  </div>
+
+  <!-- Left sidebar -->
+  <div class="sidebar-left panel">
+    <div class="section">
+      <div class="label">Uptime</div>
+      <div class="val" id="uptime">00:00:00</div>
+    </div>
+    <div class="section">
+      <div class="label">Load</div>
+      <div class="val" id="load-val">0.00</div>
+      <div class="bar-wrap"><div class="bar-fill" id="load-bar" style="width:12%"></div></div>
+    </div>
+    <div class="section">
+      <div class="label">Mem</div>
+      <div class="val" id="mem-val">0 MB</div>
+      <div class="bar-wrap"><div class="bar-fill" id="mem-bar" style="width:31%"></div></div>
+    </div>
+    <div class="section">
+      <div class="label">Net I/O</div>
+      <div class="val" id="net-val">0.0 kb/s</div>
+    </div>
+    <div class="section">
+      <div class="label">Region</div>
+      <div class="val">IAD &rarr; ORD</div>
+    </div>
+    <div class="section">
+      <div class="label">Protocol</div>
+      <div class="val">TLS 1.3</div>
+    </div>
+    <div class="section">
+      <div class="label">Entropy</div>
+      <div class="val" id="entropy">---</div>
+    </div>
+  </div>
+
+  <!-- Center -->
+  <div class="center panel">
+    <div class="wordmark" data-text="TOTATIVE">TOTATIVE</div>
+    <div class="tagline">INITIALIZING</div>
+    <div class="divider"></div>
+    <div class="hex-grid">
+      <span id="h0">0x00</span>
+      <span id="h1">0xFF</span>
+      <span id="h2">0x3C</span>
+      <span id="h3">0xA1</span>
+      <span id="h4">0x7E</span>
+      <span id="h5">0x2B</span>
+    </div>
+  </div>
+
+  <!-- Right sidebar -->
+  <div class="sidebar-right panel">
+    <div class="log-feed">
+      <div class="label">Event Log</div>
+      <div id="log-container"></div>
+    </div>
+  </div>
+
+  <!-- Bottom bar -->
+  <div class="bottombar panel">
+    <span>totative.com<span class="cursor"></span></span>
+    <div class="coords">
+      <span>LAT:&nbsp;<span id="lat">--</span></span>
+      <span>LON:&nbsp;<span id="lon">--</span></span>
+      <span>ALT:&nbsp;<span id="alt">--</span>m</span>
+    </div>
+    <span id="epoch">EPOCH:&nbsp;--</span>
+  </div>
+
+</div>
+
+<script>
+  // --- Dot-grid canvas background ---
+  (function() {
+    const canvas = document.getElementById('grid');
+    const ctx = canvas.getContext('2d');
+    let W, H;
+    function resize() {
+      W = canvas.width = window.innerWidth;
+      H = canvas.height = window.innerHeight;
+      draw();
+    }
+    function draw() {
+      ctx.clearRect(0, 0, W, H);
+      const spacing = 28;
+      ctx.fillStyle = '#1c2a3a';
+      for (let x = spacing; x < W; x += spacing) {
+        for (let y = spacing; y < H; y += spacing) {
+          ctx.beginPath();
+          ctx.arc(x, y, 0.8, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+    window.addEventListener('resize', resize);
+    resize();
+  })();
+
+  // --- Clock ---
+  function padZ(n, w) { return String(n).padStart(w, '0'); }
+
+  function updateClock() {
+    const now = new Date();
+    document.getElementById('clock').textContent =
+      padZ(now.getHours(),2) + ':' +
+      padZ(now.getMinutes(),2) + ':' +
+      padZ(now.getSeconds(),2) + '.' +
+      padZ(now.getMilliseconds(),3);
+    document.getElementById('epoch').textContent =
+      'EPOCH: ' + now.getTime();
+  }
+  setInterval(updateClock, 50);
+  updateClock();
+
+  // --- Build hash ---
+  document.getElementById('build-hash').textContent =
+    Math.floor(Math.random() * 0xFFFFFF).toString(16).toUpperCase().padStart(6,'0');
+
+  // --- Uptime ---
+  const startTime = Date.now();
+  setInterval(() => {
+    const s = Math.floor((Date.now() - startTime) / 1000);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    document.getElementById('uptime').textContent =
+      padZ(h,2) + ':' + padZ(m,2) + ':' + padZ(sec,2);
+  }, 1000);
+
+  // --- Fake metrics ---
+  setInterval(() => {
+    const load = (0.05 + Math.random() * 0.3).toFixed(2);
+    document.getElementById('load-val').textContent = load;
+    document.getElementById('load-bar').style.width = (parseFloat(load) * 200) + '%';
+
+    const mem = Math.floor(180 + Math.random() * 60);
+    document.getElementById('mem-val').textContent = mem + ' MB';
+    document.getElementById('mem-bar').style.width = (mem / 512 * 100).toFixed(1) + '%';
+
+    const net = (0.2 + Math.random() * 3.8).toFixed(1);
+    document.getElementById('net-val').textContent = net + ' kb/s';
+
+    document.getElementById('entropy').textContent =
+      Math.floor(Math.random() * 0xFFFF).toString(16).toUpperCase().padStart(4,'0');
+  }, 800);
+
+  // --- Hex values ---
+  const hexEls = ['h0','h1','h2','h3','h4','h5'];
+  setInterval(() => {
+    const idx = Math.floor(Math.random() * hexEls.length);
+    document.getElementById(hexEls[idx]).textContent =
+      '0x' + Math.floor(Math.random() * 256).toString(16).toUpperCase().padStart(2,'0');
+  }, 600);
+
+  // --- Fake geo ---
+  const baseLat = 38.90 + (Math.random() - 0.5) * 0.01;
+  const baseLon = -77.03 + (Math.random() - 0.5) * 0.01;
+  setInterval(() => {
+    document.getElementById('lat').textContent = (baseLat + (Math.random()-0.5)*0.0001).toFixed(5);
+    document.getElementById('lon').textContent = (baseLon + (Math.random()-0.5)*0.0001).toFixed(5);
+    document.getElementById('alt').textContent = (11.2 + Math.random()*0.4).toFixed(1);
+  }, 2000);
+
+  // --- Event log ---
+  const events = [
+    ['ok',   'HANDSHAKE_COMPLETE'],
+    ['info', 'STREAM_OPEN'],
+    ['ok',   'AUTH_PASS'],
+    ['info', 'PROBE_RECV'],
+    ['ok',   'CERT_VALID'],
+    ['warn', 'RETRY_3'],
+    ['info', 'ROUTE_RESOLVED'],
+    ['ok',   'SYNC_OK'],
+    ['info', 'PING_46ms'],
+    ['warn', 'CACHE_MISS'],
+    ['ok',   'CONN_STABLE'],
+    ['info', 'PKT_FWD'],
+    ['ok',   'KEY_ROTATE'],
+    ['info', 'CHECKPOINT'],
+    ['warn', 'LAG_SPIKE'],
+    ['ok',   'HEARTBEAT'],
+  ];
+
+  function addLog() {
+    const container = document.getElementById('log-container');
+    const ev = events[Math.floor(Math.random() * events.length)];
+    const now = new Date();
+    const ts = padZ(now.getHours(),2)+':'+padZ(now.getMinutes(),2)+':'+padZ(now.getSeconds(),2);
+    const el = document.createElement('span');
+    el.className = 'log-entry ' + ev[0];
+    el.innerHTML = `<span class="ts">${ts}</span><span class="code">${ev[1]}</span>`;
+    container.prepend(el);
+    // keep max 18 entries
+    while (container.children.length > 18) {
+      container.removeChild(container.lastChild);
+    }
+  }
+
+  setInterval(addLog, 900);
+  for (let i = 0; i < 8; i++) addLog();
+</script>
+</body>
+</html>
