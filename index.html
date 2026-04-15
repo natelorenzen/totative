@@ -27,6 +27,17 @@
       overflow: hidden;
     }
 
+    @media (max-width: 600px) {
+      .shell {
+        grid-template-columns: 1fr !important;
+        grid-template-rows: 40px 1fr 40px !important;
+      }
+      .sidebar-left, .sidebar-right { display: none !important; }
+      .topbar  { grid-column: 1 !important; }
+      .center  { grid-column: 1 !important; }
+      .bottombar { grid-column: 1 !important; }
+    }
+
     /* Scanline overlay */
     body::after {
       content: '';
